@@ -1,6 +1,8 @@
 package main
 
 import (
+  "os"
+  
   "github.com/gmcnaughton/gofindhdr/findhdr"
 )
 

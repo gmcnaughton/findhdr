@@ -51,10 +51,9 @@ XResolution: "72/1"
 */
 
 import (
-  "fmt"
   "path/filepath"
   "os"
-  "log"
+  "fmt"
 
   "github.com/rwcarlsen/goexif/exif"
 )
@@ -71,13 +70,15 @@ func Find(root string) {
 
       f, err := os.Open(path)
       if err != nil {
-          log.Fatal(err)
+          fmt.Println(err)
+          return nil
       }
-      // TODO: defer a close
+      defer f.Close()
 
       x, err := exif.Decode(f) // exif.Exif
       if err != nil {
-          log.Fatal(err)
+          fmt.Println(err)
+          return nil
       }
 
       // PixelYDimension, PixelXDimension, ExposureBiasValue
