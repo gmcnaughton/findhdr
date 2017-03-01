@@ -9,12 +9,14 @@ import (
 )
 
 func main() {
-  inpath := "/Users/gmcnaughton/Pictures/Photos Library.photoslibrary/Masters/2017/02/27"
+  inpath := "/Users/gmcnaughton/Pictures/Photos Library.photoslibrary/Masters/2017/02"
   // inpath := "./test"
   outpath := "./out"
 
   // Create output folder
   _ = os.Mkdir(outpath, 0755)
+
+  count := 0
 
   findhdr.Find(inpath, func(hdr *findhdr.Hdr) {
     fmt.Println(hdr)
@@ -22,6 +24,7 @@ func main() {
     for _, image := range hdr.Images() {
       link := filepath.Join(outpath, image.Info.Name())
       fmt.Println("  Linking", link)
+      count++
 
       err := os.Link(image.Path, link)
       if os.IsExist(err) {
@@ -33,4 +36,6 @@ func main() {
     }
     fmt.Println()
   })
+
+  fmt.Printf("Found %d hdrs.\n", count)
 }

@@ -1,6 +1,17 @@
 package findhdr
 
 /*
+- what about configurable # of shots?
+- allow any variation of bias values
+- ignore non-image file extensions
+- error handling, holy sweet jesus and mary - where do the errs go?
+- should we really be treating bias value as a string? why didn't StringVal() work?
+- support non-JPG filenames
+- print out some stats afterwards
+- configurable verbosity, please!
+- configuration that just prints out matching file names to stdout instead of hardlinking
+- use the findhdr.Image abstraction internally
+
 *exif.Exif, DateTime: "2017:02:26 13:04:32"
 ExifVersion: "0221"
 DateTimeOriginal: "2017:02:26 13:04:32"
@@ -172,28 +183,34 @@ func Find(root string, findfn func(hdr *Hdr)) {
       return err
     }
 
-    if !info.IsDir() {
-      f, err := os.Open(path)
-      if err != nil {
-          fmt.Println(err)
-          return nil
-      }
-      defer f.Close()
+    if info.IsDir() {
+      return nil
+    }
 
-      x, err := exif.Decode(f)
-      if err != nil {
-          fmt.Println(err)
-          return nil
-      }
+    ext := filepath.Ext(path)
+    if ext != ".JPG" {
+      return nil
+    }
 
-      hdr.Add(x, path, info)
-      if hdr.IsHdr() {
-        // fmt.Println(hdr)
-        if findfn != nil {
-          findfn(&hdr)
-        }
-        hdr = Hdr{}
+    f, err := os.Open(path)
+    if err != nil {
+        fmt.Println(err)
+        return nil
+    }
+    defer f.Close()
+
+    x, err := exif.Decode(f)
+    if err != nil {
+        fmt.Println(err)
+        return nil
+    }
+
+    hdr.Add(x, path, info)
+    if hdr.IsHdr() {
+      if findfn != nil {
+        findfn(&hdr)
       }
+      hdr = Hdr{}
     }
 
     return nil // or SkipDir to skip processng this dir
