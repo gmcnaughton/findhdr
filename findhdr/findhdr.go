@@ -63,29 +63,48 @@ type Hdr struct {
   b *exif.Exif
   c *exif.Exif
 
+  ai os.FileInfo
+  bi os.FileInfo
+  ci os.FileInfo
+
   ap string
   bp string
   cp string
 }
 
-func (hdr *Hdr) Add(x *exif.Exif, path string) {
+type Image struct {
+  Info os.FileInfo
+  Path string
+}
+
+func (hdr *Hdr) Add(x *exif.Exif, path string, info os.FileInfo) {
   if hdr.a == nil {
     hdr.a = x
     hdr.ap = path
+    hdr.ai = info
   } else if hdr.b == nil {
     hdr.b = x
     hdr.bp = path
+    hdr.bi = info
   } else if hdr.c == nil {
     hdr.c = x
     hdr.cp = path
+    hdr.ci = info
   } else {
     hdr.a = hdr.b
     hdr.ap = hdr.bp
+    hdr.ai = hdr.bi
     hdr.b = hdr.c
     hdr.bp = hdr.cp
+    hdr.bi = hdr.ci
     hdr.c = x
     hdr.cp = path
+    hdr.ci = info
   }
+}
+
+func (hdr Hdr) String() string {
+  return fmt.Sprintf("HDR [%s, %s, %s]", hdr.ai.Name(), hdr.bi.Name(), hdr.ci.Name())
 }
 
 func (hdr *Hdr) IsHdr() bool {
@@ -136,7 +155,15 @@ func (hdr *Hdr) IsHdr() bool {
   return true
 }
 
-func Find(root string) {
+func (hdr *Hdr) Images() []Image {
+  return []Image{
+    Image{ Path: hdr.ap, Info: hdr.ai },
+    Image{ Path: hdr.bp, Info: hdr.bi },
+    Image{ Path: hdr.cp, Info: hdr.ci },
+  }
+}
+
+func Find(root string, findfn func(hdr *Hdr)) {
   hdr := Hdr{}
 
   // See https://golang.org/pkg/path/filepath/#WalkFunc
@@ -146,8 +173,6 @@ func Find(root string) {
     }
 
     if !info.IsDir() {
-      // fmt.Println(info.Name())
-
       f, err := os.Open(path)
       if err != nil {
           fmt.Println(err)
@@ -161,9 +186,12 @@ func Find(root string) {
           return nil
       }
 
-      hdr.Add(x, path)
+      hdr.Add(x, path, info)
       if hdr.IsHdr() {
-        fmt.Println("FOUND AN HDR", hdr)
+        // fmt.Println(hdr)
+        if findfn != nil {
+          findfn(&hdr)
+        }
         hdr = Hdr{}
       }
     }

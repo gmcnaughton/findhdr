@@ -1,18 +1,36 @@
 package main
 
 import (
+  "fmt"
   "os"
-  
+  "path/filepath"
+
   "github.com/gmcnaughton/gofindhdr/findhdr"
 )
 
 func main() {
-  var path string
-  if (len(os.Args) > 1) {
-    path = os.Args[1]
-  } else {
-    path = "/Users/gmcnaughton/Pictures/Photos Library.photoslibrary/Masters/2017/02/27"
-  }
+  inpath := "/Users/gmcnaughton/Pictures/Photos Library.photoslibrary/Masters/2017/02/27"
+  // inpath := "./test"
+  outpath := "./out"
 
-  findhdr.Find(path)
+  // Create output folder
+  _ = os.Mkdir(outpath, 0755)
+
+  findhdr.Find(inpath, func(hdr *findhdr.Hdr) {
+    fmt.Println(hdr)
+    fmt.Println("-----------")
+    for _, image := range hdr.Images() {
+      link := filepath.Join(outpath, image.Info.Name())
+      fmt.Println("  Linking", link)
+
+      err := os.Link(image.Path, link)
+      if os.IsExist(err) {
+        fmt.Printf("  Skipping %s (file already exists)\n", link)
+      } else if err != nil {
+        fmt.Printf("  Error linking %s\n", link)
+        fmt.Println(err)
+      }
+    }
+    fmt.Println()
+  })
 }
