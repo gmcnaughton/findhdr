@@ -58,7 +58,87 @@ import (
   "github.com/rwcarlsen/goexif/exif"
 )
 
+type Hdr struct {
+  a *exif.Exif
+  b *exif.Exif
+  c *exif.Exif
+
+  ap string
+  bp string
+  cp string
+}
+
+func (hdr *Hdr) Add(x *exif.Exif, path string) {
+  if hdr.a == nil {
+    hdr.a = x
+    hdr.ap = path
+  } else if hdr.b == nil {
+    hdr.b = x
+    hdr.bp = path
+  } else if hdr.c == nil {
+    hdr.c = x
+    hdr.cp = path
+  } else {
+    hdr.a = hdr.b
+    hdr.ap = hdr.bp
+    hdr.b = hdr.c
+    hdr.bp = hdr.cp
+    hdr.c = x
+    hdr.cp = path
+  }
+}
+
+func (hdr *Hdr) IsHdr() bool {
+  if hdr.a == nil || hdr.b == nil || hdr.c == nil {
+    // fmt.Println("Skipping: insufficient candidates")
+    return false
+  }
+
+  aytag, _ := hdr.a.Get(exif.PixelYDimension)
+  bytag, _ := hdr.b.Get(exif.PixelYDimension)
+  cytag, _ := hdr.c.Get(exif.PixelYDimension)
+
+  axtag, _ := hdr.a.Get(exif.PixelXDimension)
+  bxtag, _ := hdr.b.Get(exif.PixelXDimension)
+  cxtag, _ := hdr.c.Get(exif.PixelXDimension)
+
+  abiastag, _ := hdr.a.Get(exif.ExposureBiasValue)
+  bbiastag, _ := hdr.b.Get(exif.ExposureBiasValue)
+  cbiastag, _ := hdr.c.Get(exif.ExposureBiasValue)
+
+  ax, _ := axtag.Int(0)
+  bx, _ := bxtag.Int(0)
+  cx, _ := cxtag.Int(0)
+
+  ay, _ := aytag.Int(0)
+  by, _ := bytag.Int(0)
+  cy, _ := cytag.Int(0)
+
+  abias := abiastag.String()
+  bbias := bbiastag.String()
+  cbias := cbiastag.String()
+
+  if ax != bx || bx != cx {
+    // fmt.Println("Skipping: x dimension mismatch", ax, bx, cx)
+    return false
+  }
+
+  if ay != by || by != cy {
+    // fmt.Println("Skipping: y dimension mismatch", ay, by, cy)
+    return false
+  }
+
+  if abias != "\"0/1\"" || bbias != "\"-2/1\"" || cbias != "\"2/1\"" {
+    // fmt.Println("Skipping: bias mismatch", abias, bbias, cbias)
+    return false
+  }
+
+  return true
+}
+
 func Find(root string) {
+  hdr := Hdr{}
+
   // See https://golang.org/pkg/path/filepath/#WalkFunc
   filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
     if err != nil {
@@ -66,7 +146,7 @@ func Find(root string) {
     }
 
     if !info.IsDir() {
-      fmt.Println(info.Name())
+      // fmt.Println(info.Name())
 
       f, err := os.Open(path)
       if err != nil {
@@ -75,15 +155,17 @@ func Find(root string) {
       }
       defer f.Close()
 
-      x, err := exif.Decode(f) // exif.Exif
+      x, err := exif.Decode(f)
       if err != nil {
           fmt.Println(err)
           return nil
       }
 
-      // PixelYDimension, PixelXDimension, ExposureBiasValue
-      bias, _ := x.Get(exif.ExposureBiasValue)
-      fmt.Printf("%s = %s\n", path, bias) // "0/1", "-2/1", "2/1"
+      hdr.Add(x, path)
+      if hdr.IsHdr() {
+        fmt.Println("FOUND AN HDR", hdr)
+        hdr = Hdr{}
+      }
     }
 
     return nil // or SkipDir to skip processng this dir
