@@ -9,36 +9,38 @@ import (
 )
 
 func main() {
-  inpath := "/Users/gmcnaughton/Pictures/Photos Library.photoslibrary/Masters/2017/02"
-  // inpath := "./test"
+  // inpath := "/Users/gmcnaughton/Pictures/Photos Library.photoslibrary/Masters/2017/02"
+  inpath := "./test"
   outpath := "./out"
-  optlink := true
+  optlink := false
 
   // Create output folder
-  _ = os.Mkdir(outpath, 0755)
+  if optlink {
+    err := os.Mkdir(outpath, 0755)
+    if err != nil && !os.IsExist(err) {
+      fmt.Println("Error creating out directory", err)
+    }
+  }
 
   count := 0
 
   findhdr.Find(inpath, func(hdr *findhdr.Hdr) {
-    for _, image := range hdr.Images() {
-      count++
+    count++
 
-      link := filepath.Join(outpath, image.Info.Name())
-
-      if optlink {
+    if optlink {
+      for _, image := range hdr.Images() {
+        link := filepath.Join(outpath, image.Info.Name())
         fmt.Println("Linking", link)
         err := os.Link(image.Path, link)
         if os.IsExist(err) {
-          fmt.Printf("Skipping %s (file exists)\n", link)
+          fmt.Println("Skipping", err)
         } else if err != nil {
-          fmt.Printf("Error linking %s\n", link)
-          fmt.Println(err)
+          fmt.Println("Error linking", err)
         }
-      } else {
-        fmt.Println(hdr)
       }
+    } else {
+      fmt.Println(hdr)
     }
-    fmt.Println()
   })
 
   fmt.Printf("Found %d hdrs.\n", count)
