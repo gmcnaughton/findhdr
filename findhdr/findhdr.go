@@ -3,14 +3,12 @@ package findhdr
 /*
 - what about configurable # of shots?
 - allow any variation of bias values
-- ignore non-image file extensions
 - error handling, holy sweet jesus and mary - where do the errs go?
 - should we really be treating bias value as a string? why didn't StringVal() work?
 - support non-JPG filenames
 - print out some stats afterwards
 - configurable verbosity, please!
 - configuration that just prints out matching file names to stdout instead of hardlinking
-- use the findhdr.Image abstraction internally
 
 *exif.Exif, DateTime: "2017:02:26 13:04:32"
 ExifVersion: "0221"
@@ -70,52 +68,35 @@ import (
 )
 
 type Hdr struct {
-  a *exif.Exif
-  b *exif.Exif
-  c *exif.Exif
-
-  ai os.FileInfo
-  bi os.FileInfo
-  ci os.FileInfo
-
-  ap string
-  bp string
-  cp string
+  a *Image
+  b *Image
+  c *Image
 }
 
 type Image struct {
-  Info os.FileInfo
   Path string
+  Info os.FileInfo
+
+  exif *exif.Exif
 }
 
 func (hdr *Hdr) Add(x *exif.Exif, path string, info os.FileInfo) {
+  img := &Image{ path, info, x }
   if hdr.a == nil {
-    hdr.a = x
-    hdr.ap = path
-    hdr.ai = info
+    hdr.a = img
   } else if hdr.b == nil {
-    hdr.b = x
-    hdr.bp = path
-    hdr.bi = info
+    hdr.b = img
   } else if hdr.c == nil {
-    hdr.c = x
-    hdr.cp = path
-    hdr.ci = info
+    hdr.c = img
   } else {
     hdr.a = hdr.b
-    hdr.ap = hdr.bp
-    hdr.ai = hdr.bi
     hdr.b = hdr.c
-    hdr.bp = hdr.cp
-    hdr.bi = hdr.ci
-    hdr.c = x
-    hdr.cp = path
-    hdr.ci = info
+    hdr.c = img
   }
 }
 
 func (hdr Hdr) String() string {
-  return fmt.Sprintf("HDR [%s, %s, %s]", hdr.ai.Name(), hdr.bi.Name(), hdr.ci.Name())
+  return fmt.Sprintf("HDR [%s, %s, %s]", hdr.a.Info.Name(), hdr.b.Info.Name(), hdr.c.Info.Name())
 }
 
 func (hdr *Hdr) IsHdr() bool {
@@ -124,17 +105,17 @@ func (hdr *Hdr) IsHdr() bool {
     return false
   }
 
-  aytag, _ := hdr.a.Get(exif.PixelYDimension)
-  bytag, _ := hdr.b.Get(exif.PixelYDimension)
-  cytag, _ := hdr.c.Get(exif.PixelYDimension)
+  aytag, _ := hdr.a.exif.Get(exif.PixelYDimension)
+  bytag, _ := hdr.b.exif.Get(exif.PixelYDimension)
+  cytag, _ := hdr.c.exif.Get(exif.PixelYDimension)
 
-  axtag, _ := hdr.a.Get(exif.PixelXDimension)
-  bxtag, _ := hdr.b.Get(exif.PixelXDimension)
-  cxtag, _ := hdr.c.Get(exif.PixelXDimension)
+  axtag, _ := hdr.a.exif.Get(exif.PixelXDimension)
+  bxtag, _ := hdr.b.exif.Get(exif.PixelXDimension)
+  cxtag, _ := hdr.c.exif.Get(exif.PixelXDimension)
 
-  abiastag, _ := hdr.a.Get(exif.ExposureBiasValue)
-  bbiastag, _ := hdr.b.Get(exif.ExposureBiasValue)
-  cbiastag, _ := hdr.c.Get(exif.ExposureBiasValue)
+  abiastag, _ := hdr.a.exif.Get(exif.ExposureBiasValue)
+  bbiastag, _ := hdr.b.exif.Get(exif.ExposureBiasValue)
+  cbiastag, _ := hdr.c.exif.Get(exif.ExposureBiasValue)
 
   ax, _ := axtag.Int(0)
   bx, _ := bxtag.Int(0)
@@ -166,11 +147,11 @@ func (hdr *Hdr) IsHdr() bool {
   return true
 }
 
-func (hdr *Hdr) Images() []Image {
-  return []Image{
-    Image{ Path: hdr.ap, Info: hdr.ai },
-    Image{ Path: hdr.bp, Info: hdr.bi },
-    Image{ Path: hdr.cp, Info: hdr.ci },
+func (hdr *Hdr) Images() []*Image {
+  return []*Image{
+    hdr.a,
+    hdr.b,
+    hdr.c,
   }
 }
 
