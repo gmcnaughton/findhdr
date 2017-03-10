@@ -155,16 +155,34 @@ func (hdr *Hdr) Images() []*Image {
   }
 }
 
-func Find(root string, findfn func(hdr *Hdr)) {
+type FileFinderFunc filepath.WalkFunc
+
+type FileFinder interface {
+  Find(FileFinderFunc)
+}
+
+type FilePathWalker struct {
+  Root string
+}
+
+func (f FilePathWalker) Find(fileFinderFn FileFinderFunc) {
+  filepath.Walk(f.Root, func(path string, info os.FileInfo, err error) error {
+    return fileFinderFn(path, info, err)
+  })
+}
+
+type HdrFunc func(hdr *Hdr)
+
+func Find(finder FileFinder, hdrFn HdrFunc) {
   hdr := Hdr{}
 
   // See https://golang.org/pkg/path/filepath/#WalkFunc
-  filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+  finder.Find(func(path string, info os.FileInfo, err error) error {
     if err != nil {
       return err
     }
 
-    if info.IsDir() {
+    if info != nil && info.IsDir() {
       return nil
     }
 
@@ -188,8 +206,8 @@ func Find(root string, findfn func(hdr *Hdr)) {
 
     hdr.Add(x, path, info)
     if hdr.IsHdr() {
-      if findfn != nil {
-        findfn(&hdr)
+      if hdrFn != nil {
+        hdrFn(&hdr)
       }
       hdr = Hdr{}
     }

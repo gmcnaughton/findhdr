@@ -32,7 +32,8 @@ func main() {
 
   count := 0
 
-  findhdr.Find(inpath, func(hdr *findhdr.Hdr) {
+  finder := findhdr.FilePathWalker{ inpath }
+  findhdr.Find(finder, func(hdr *findhdr.Hdr) {
     count++
 
     if link {
