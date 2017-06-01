@@ -6,12 +6,13 @@ import (
   "os"
   "path/filepath"
 
-  "github.com/gmcnaughton/gofindhdr/findhdr"
+  "github.com/gmcnaughton/findhdr"
 )
 
 // Usage:
-//     go run main.go -in ./test
-//     go run main.go -in ~/Pictures/Photos\ Library.photoslibrary/Masters/2017/03 -out ./out -link
+//     go build ...findhdr
+//     findhdr -in ./test
+//     findhdr -in ~/Pictures/Photos\ Library.photoslibrary/Masters/2017/03 -out ./out -link
 func main() {
   var inpath, outpath string
   var link bool
