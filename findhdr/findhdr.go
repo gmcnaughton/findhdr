@@ -1,6 +1,8 @@
 package findhdr
 
 /*
+TODO
+----
 - what about configurable # of shots?
 - allow any variation of bias values
 - error handling, holy sweet jesus and mary - where do the errs go?
@@ -77,10 +79,58 @@ type Image struct {
   Path string
   Info os.FileInfo
 
+  exif Exif
+}
+
+type Exif interface {
+  PixelXDimension() (int, error)
+  PixelYDimension() (int, error)
+  ExposureBiasValue() (string, error)
+}
+
+type exifWrapper struct {
   exif *exif.Exif
 }
 
-func (hdr *Hdr) Add(x *exif.Exif, path string, info os.FileInfo) {
+func (wrapper *exifWrapper) PixelXDimension() (val int, err error) {
+  tag, err := wrapper.exif.Get(exif.PixelXDimension)
+  if err != nil {
+    return 0, err
+  }
+
+  val, err = tag.Int(0)
+  if err != nil {
+    return 0, err
+  }
+
+  return
+}
+
+func (wrapper *exifWrapper) PixelYDimension() (val int, err error) {
+  tag, err := wrapper.exif.Get(exif.PixelYDimension)
+  if err != nil {
+    return 0, err
+  }
+
+  val, err = tag.Int(0)
+  if err != nil {
+    return 0, err
+  }
+
+  return
+}
+
+func (wrapper *exifWrapper) ExposureBiasValue() (val string, err error) {
+  tag, err := wrapper.exif.Get(exif.ExposureBiasValue)
+  if err != nil {
+    return "", err
+  }
+
+  val = tag.String()
+  return
+}
+
+func (hdr *Hdr) Add(x Exif, path string, info os.FileInfo) {
   img := &Image{ path, info, x }
   if hdr.a == nil {
     hdr.a = img
@@ -95,8 +145,8 @@ func (hdr *Hdr) Add(x *exif.Exif, path string, info os.FileInfo) {
   }
 }
 
-func (hdr Hdr) String() string {
-  return fmt.Sprintf("HDR [%s, %s, %s]", hdr.a.Info.Name(), hdr.b.Info.Name(), hdr.c.Info.Name())
+func (hdr *Hdr) String() string {
+  return fmt.Sprintf("[%s, %s, %s]", hdr.a.Info.Name(), hdr.b.Info.Name(), hdr.c.Info.Name())
 }
 
 func (hdr *Hdr) IsHdr() bool {
@@ -105,29 +155,17 @@ func (hdr *Hdr) IsHdr() bool {
     return false
   }
 
-  aytag, _ := hdr.a.exif.Get(exif.PixelYDimension)
-  bytag, _ := hdr.b.exif.Get(exif.PixelYDimension)
-  cytag, _ := hdr.c.exif.Get(exif.PixelYDimension)
+  ay, _ := hdr.a.exif.PixelYDimension()
+  by, _ := hdr.b.exif.PixelYDimension()
+  cy, _ := hdr.c.exif.PixelYDimension()
 
-  axtag, _ := hdr.a.exif.Get(exif.PixelXDimension)
-  bxtag, _ := hdr.b.exif.Get(exif.PixelXDimension)
-  cxtag, _ := hdr.c.exif.Get(exif.PixelXDimension)
+  ax, _ := hdr.a.exif.PixelXDimension()
+  bx, _ := hdr.b.exif.PixelXDimension()
+  cx, _ := hdr.c.exif.PixelXDimension()
 
-  abiastag, _ := hdr.a.exif.Get(exif.ExposureBiasValue)
-  bbiastag, _ := hdr.b.exif.Get(exif.ExposureBiasValue)
-  cbiastag, _ := hdr.c.exif.Get(exif.ExposureBiasValue)
-
-  ax, _ := axtag.Int(0)
-  bx, _ := bxtag.Int(0)
-  cx, _ := cxtag.Int(0)
-
-  ay, _ := aytag.Int(0)
-  by, _ := bytag.Int(0)
-  cy, _ := cytag.Int(0)
-
-  abias := abiastag.String()
-  bbias := bbiastag.String()
-  cbias := cbiastag.String()
+  abias, _ := hdr.a.exif.ExposureBiasValue()
+  bbias, _ := hdr.b.exif.ExposureBiasValue()
+  cbias, _ := hdr.c.exif.ExposureBiasValue()
 
   if ax != bx || bx != cx {
     // fmt.Println("Skipping: x dimension mismatch", ax, bx, cx)
@@ -158,7 +196,7 @@ func (hdr *Hdr) Images() []*Image {
 type FileFinderFunc filepath.WalkFunc
 
 type FileFinder interface {
-  Find(FileFinderFunc)
+  Find(fileFinderFn FileFinderFunc)
 }
 
 type FilePathWalker struct {
@@ -171,9 +209,30 @@ func (f FilePathWalker) Find(fileFinderFn FileFinderFunc) {
   })
 }
 
+type Decoder interface {
+  Decode(path string) (exif Exif, err error)
+}
+
+type ExifDecoder struct {}
+
+func (d *ExifDecoder) Decode(path string) (Exif, error) {
+  f, err := os.Open(path)
+  if err != nil {
+      return nil, err
+  }
+  defer f.Close()
+
+  w := new(exifWrapper)
+  w.exif, err = exif.Decode(f)
+  if err != nil {
+    return nil, err
+  }
+  return w, nil
+}
+
 type HdrFunc func(hdr *Hdr)
 
-func Find(finder FileFinder, hdrFn HdrFunc) {
+func Find(finder FileFinder, decoder Decoder, hdrFn HdrFunc) {
   hdr := Hdr{}
 
   // See https://golang.org/pkg/path/filepath/#WalkFunc
@@ -191,14 +250,7 @@ func Find(finder FileFinder, hdrFn HdrFunc) {
       return nil
     }
 
-    f, err := os.Open(path)
-    if err != nil {
-        fmt.Println(err)
-        return nil
-    }
-    defer f.Close()
-
-    x, err := exif.Decode(f)
+    x, err := decoder.Decode(path)
     if err != nil {
         fmt.Println(err)
         return nil

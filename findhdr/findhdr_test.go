@@ -5,6 +5,9 @@ import (
   "os"
 )
 
+// Usage:
+//     go test -v ./...
+
 func TestHdrIsHdrWhenEmpty(t *testing.T) {
   hdr := Hdr{}
   if hdr.IsHdr() {
@@ -34,13 +37,13 @@ func (f fixtureFileFinder) Find(fileFinderFn FileFinderFunc) {
 }
 
 func TestFindNonExistantDirectory(t *testing.T) {
-  Find(fixtureFileFinder{ err: os.ErrNotExist }, func(hdr *Hdr) {
+  Find(fixtureFileFinder{ err: os.ErrNotExist }, &ExifDecoder{}, func(hdr *Hdr) {
     t.Error("Expected no HDRs to get reported")
   })
 }
 
 func TestFindEmptyDirectory(t *testing.T) {
-  Find(fixtureFileFinder{ }, func(hdr *Hdr) {
+  Find(fixtureFileFinder{ }, &ExifDecoder{}, func(hdr *Hdr) {
     t.Error("Expected no HDRs to get reported")
   })
 }
@@ -52,7 +55,7 @@ func TestFindNonImageFiles(t *testing.T) {
     fixtureFile{ path: "foo3.txt" },
   }
 
-  Find(fixtureFileFinder{ files: files }, func(hdr *Hdr) {
+  Find(fixtureFileFinder{ files: files }, &ExifDecoder{}, func(hdr *Hdr) {
     t.Error("Expected no HDRs to get reported")
   })
 }
@@ -64,7 +67,60 @@ func TestFindNonExistantImageFiles(t *testing.T) {
     fixtureFile{ path: "foo3.JPG" },
   }
 
-  Find(fixtureFileFinder{ files: files }, func(hdr *Hdr) {
+  Find(fixtureFileFinder{ files: files }, &ExifDecoder{}, func(hdr *Hdr) {
+    t.Error("Expected no HDRs to get reported")
+  })
+}
+
+type fixtureDecoder struct {
+  exifs []Exif
+  errs []error
+  calls int
+}
+
+func (decoder *fixtureDecoder) Decode(path string) (exif Exif, err error) {
+  decoder.calls++
+  return decoder.exifs[decoder.calls-1], decoder.errs[decoder.calls-1]
+}
+
+type fixtureExif struct {
+  xdim int
+  ydim int
+  bias string
+}
+
+func (exif *fixtureExif) PixelXDimension() (val int, err error) {
+  return exif.xdim, nil
+}
+
+func (exif *fixtureExif) PixelYDimension() (val int, err error) {
+  return exif.xdim, nil
+}
+
+func (exif *fixtureExif) ExposureBiasValue() (val string, err error) {
+  return exif.bias, nil
+}
+
+func TestFindSuccess(t *testing.T) {
+  files := []fixtureFile{
+    fixtureFile{ path: "foo1.JPG" },
+    fixtureFile{ path: "foo2.JPG" },
+    fixtureFile{ path: "foo3.JPG" },
+  }
+
+  exifs := []Exif {
+    &fixtureExif{200, 100, "0/1"},
+    &fixtureExif{200, 100, "-2/1"},
+    &fixtureExif{200, 100, "2/1"},
+  }
+
+  errs := []error{
+    nil,
+    nil,
+    nil,
+  }
+
+  Find(fixtureFileFinder{ files: files }, &fixtureDecoder{ exifs: exifs, errs: errs }, func(hdr *Hdr) {
     t.Error("Expected no HDRs to get reported")
   })
 }

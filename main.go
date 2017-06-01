@@ -10,8 +10,8 @@ import (
 )
 
 // Usage:
-//     go run main.go -in "~/Pictures/Photos Library.photoslibrary/Masters/2017/02" -out ./out -link
-//     go run main.go -in ./test -out ./out
+//     go run main.go -in ./test
+//     go run main.go -in ~/Pictures/Photos\ Library.photoslibrary/Masters/2017/03 -out ./out -link
 func main() {
   var inpath, outpath string
   var link bool
@@ -33,7 +33,8 @@ func main() {
   count := 0
 
   finder := findhdr.FilePathWalker{ inpath }
-  findhdr.Find(finder, func(hdr *findhdr.Hdr) {
+  decoder := &findhdr.ExifDecoder{}
+  findhdr.Find(finder, decoder, func(hdr *findhdr.Hdr) {
     count++
 
     if link {
@@ -48,7 +49,7 @@ func main() {
         }
       }
     } else {
-      fmt.Println(hdr)
+      fmt.Println("Found", hdr)
     }
   })
 
