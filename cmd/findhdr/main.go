@@ -11,23 +11,32 @@ import (
 
 // Usage:
 //     go build ...findhdr
-//     findhdr -in ./test
-//     findhdr -in ~/Pictures/Photos\ Library.photoslibrary/Masters/2017/03 -out ./out -link
+//     go install ...findhdr
+//     findhdr ./test
+//     findhdr -link ./out ~/Pictures/Photos\ Library.photoslibrary/Masters/2017/03
 func main() {
   var inpath, outpath string
-  var link bool
 
-  // flag.StringVar(&inpath, "in", "/Users/gmcnaughton/Pictures/Photos Library.photoslibrary/Masters/2017/02", "path to input directory to search")
-  flag.StringVar(&inpath, "in", "./test", "path to search")
-  flag.StringVar(&outpath, "out", "./out", "path where matches should be linked")
-  flag.BoolVar(&link, "link", false, "true if matches should be linked")
+  flag.StringVar(&outpath, "link", "", "(optional) path where images should be linked")
+  flag.Usage = func() {
+    fmt.Fprintf(os.Stderr, "Usage: %s [options] <path to images>\n", os.Args[0])
+    flag.PrintDefaults()
+  }
   flag.Parse()
 
+  // Input path can be passed in using the `-in` flag or as the first argument
+  inpath = flag.Arg(0)
+  if inpath == "" {
+    flag.Usage()
+    os.Exit(2)
+  }
+
   // Create output folder
-  if link {
+  if outpath != "" {
     err := os.Mkdir(outpath, 0755)
     if err != nil && !os.IsExist(err) {
       fmt.Println("Error creating out directory", err)
+      os.Exit(1)
     }
   }
 
@@ -38,15 +47,17 @@ func main() {
   findhdr.Find(finder, decoder, func(hdr *findhdr.Hdr) {
     count++
 
-    if link {
+    if outpath != "" {
       for _, image := range hdr.Images() {
         link := filepath.Join(outpath, image.Info.Name())
-        fmt.Println("Linking", link)
         err := os.Link(image.Path, link)
         if os.IsExist(err) {
-          fmt.Println("Skipping", err)
+          fmt.Println("Skipping", link, "file exists")
         } else if err != nil {
           fmt.Println("Error linking", err)
+          os.Exit(1)
+        } else {
+          fmt.Println("Linking", link)
         }
       }
     } else {

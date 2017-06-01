@@ -2,9 +2,9 @@
 
 This repository contains a tool for finding HDR images in directories containing a mix of HDR and non-HDR images (such as imported photos from a digital camerap).
 
-Images are considered part of an HDR if there is a series of images with contiguous file names (*IMG_0001.jpg, IMG_0002.jpg, IMG_003.jpg*) and identical dimensions (*1024x768*) but different exposure bias values (*+2/-2/0*).
+Images are considered part of an HDR if a series of images exist with contiguous file names (*IMG_0001.jpg, IMG_0002.jpg, IMG_003.jpg*) and identical dimensions (*1024x768*), but different exposure bias values (*+2/-2/0*).
 
-HDR images can be linked into a target folder in preparation for batch processing by [Photomatix](https://www.hdrsoft.com/).
+Images found by `findhdr` can be linked into a target folder, to prepare for batch processing by [Photomatix](https://www.hdrsoft.com/).
 
 ### Installation
 
@@ -14,11 +14,11 @@ HDR images can be linked into a target folder in preparation for batch processin
 
 Print a list of HDRs found in a directory:
 
-    findhdr -in ~/path/to/photos
+    findhdr /path/to/photos
 
-Hard-link HDRs found in the `-in` directory to the `-out` directory:
+Link HDRs found into the `-link` directory:
 
-    findhdr -in ~/path/to/photos -out ./out -link
+    findhdr -link ./out /path/to/photos
 
 ## Contributing
 
