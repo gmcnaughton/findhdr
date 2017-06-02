@@ -10,8 +10,36 @@ TODO
 - support non-JPG filenames
 - print out some stats afterwards
 - configurable verbosity, please!
-- configuration that just prints out matching file names to stdout instead of hardlinking
+*/
 
+import (
+  "path/filepath"
+  "os"
+  "fmt"
+
+  "github.com/rwcarlsen/goexif/exif"
+)
+
+type Hdr struct {
+  a *Image
+  b *Image
+  c *Image
+}
+
+type Image struct {
+  Path string
+  Info os.FileInfo
+
+  exif Exif
+}
+
+type Exif interface {
+  PixelXDimension() (int, error)
+  PixelYDimension() (int, error)
+  ExposureBiasValue() (string, error)
+}
+
+/*
 *exif.Exif, DateTime: "2017:02:26 13:04:32"
 ExifVersion: "0221"
 DateTimeOriginal: "2017:02:26 13:04:32"
@@ -60,34 +88,6 @@ FlashpixVersion: "0100"
 FocalPlaneYResolution: "3456000/595"
 XResolution: "72/1"
 */
-
-import (
-  "path/filepath"
-  "os"
-  "fmt"
-
-  "github.com/rwcarlsen/goexif/exif"
-)
-
-type Hdr struct {
-  a *Image
-  b *Image
-  c *Image
-}
-
-type Image struct {
-  Path string
-  Info os.FileInfo
-
-  exif Exif
-}
-
-type Exif interface {
-  PixelXDimension() (int, error)
-  PixelYDimension() (int, error)
-  ExposureBiasValue() (string, error)
-}
-
 type exifWrapper struct {
   exif *exif.Exif
 }
