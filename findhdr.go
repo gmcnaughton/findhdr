@@ -13,30 +13,30 @@ TODO
 */
 
 import (
-  "path/filepath"
-  "os"
-  "fmt"
+	"fmt"
+	"os"
+	"path/filepath"
 
-  "github.com/rwcarlsen/goexif/exif"
+	"github.com/rwcarlsen/goexif/exif"
 )
 
 type Hdr struct {
-  a *Image
-  b *Image
-  c *Image
+	a *Image
+	b *Image
+	c *Image
 }
 
 type Image struct {
-  Path string
-  Info os.FileInfo
+	Path string
+	Info os.FileInfo
 
-  exif Exif
+	exif Exif
 }
 
 type Exif interface {
-  PixelXDimension() (int, error)
-  PixelYDimension() (int, error)
-  ExposureBiasValue() (string, error)
+	PixelXDimension() (int, error)
+	PixelYDimension() (int, error)
+	ExposureBiasValue() (string, error)
 }
 
 /*
@@ -89,181 +89,181 @@ FocalPlaneYResolution: "3456000/595"
 XResolution: "72/1"
 */
 type exifWrapper struct {
-  exif *exif.Exif
+	exif *exif.Exif
 }
 
 func (wrapper *exifWrapper) PixelXDimension() (val int, err error) {
-  tag, err := wrapper.exif.Get(exif.PixelXDimension)
-  if err != nil {
-    return 0, err
-  }
+	tag, err := wrapper.exif.Get(exif.PixelXDimension)
+	if err != nil {
+		return 0, err
+	}
 
-  val, err = tag.Int(0)
-  if err != nil {
-    return 0, err
-  }
+	val, err = tag.Int(0)
+	if err != nil {
+		return 0, err
+	}
 
-  return
+	return
 }
 
 func (wrapper *exifWrapper) PixelYDimension() (val int, err error) {
-  tag, err := wrapper.exif.Get(exif.PixelYDimension)
-  if err != nil {
-    return 0, err
-  }
+	tag, err := wrapper.exif.Get(exif.PixelYDimension)
+	if err != nil {
+		return 0, err
+	}
 
-  val, err = tag.Int(0)
-  if err != nil {
-    return 0, err
-  }
+	val, err = tag.Int(0)
+	if err != nil {
+		return 0, err
+	}
 
-  return
+	return
 }
 
 func (wrapper *exifWrapper) ExposureBiasValue() (val string, err error) {
-  tag, err := wrapper.exif.Get(exif.ExposureBiasValue)
-  if err != nil {
-    return "", err
-  }
+	tag, err := wrapper.exif.Get(exif.ExposureBiasValue)
+	if err != nil {
+		return "", err
+	}
 
-  val = tag.String()
-  return
+	val = tag.String()
+	return
 }
 
 func (hdr *Hdr) Add(x Exif, path string, info os.FileInfo) {
-  img := &Image{ path, info, x }
-  if hdr.a == nil {
-    hdr.a = img
-  } else if hdr.b == nil {
-    hdr.b = img
-  } else if hdr.c == nil {
-    hdr.c = img
-  } else {
-    hdr.a = hdr.b
-    hdr.b = hdr.c
-    hdr.c = img
-  }
+	img := &Image{path, info, x}
+	if hdr.a == nil {
+		hdr.a = img
+	} else if hdr.b == nil {
+		hdr.b = img
+	} else if hdr.c == nil {
+		hdr.c = img
+	} else {
+		hdr.a = hdr.b
+		hdr.b = hdr.c
+		hdr.c = img
+	}
 }
 
 func (hdr *Hdr) String() string {
-  return fmt.Sprintf("[%s, %s, %s]", hdr.a.Info.Name(), hdr.b.Info.Name(), hdr.c.Info.Name())
+	return fmt.Sprintf("[%s, %s, %s]", hdr.a.Info.Name(), hdr.b.Info.Name(), hdr.c.Info.Name())
 }
 
 func (hdr *Hdr) IsHdr() bool {
-  if hdr.a == nil || hdr.b == nil || hdr.c == nil {
-    // fmt.Println("Skipping: insufficient candidates")
-    return false
-  }
+	if hdr.a == nil || hdr.b == nil || hdr.c == nil {
+		// fmt.Println("Skipping: insufficient candidates")
+		return false
+	}
 
-  ay, _ := hdr.a.exif.PixelYDimension()
-  by, _ := hdr.b.exif.PixelYDimension()
-  cy, _ := hdr.c.exif.PixelYDimension()
+	ay, _ := hdr.a.exif.PixelYDimension()
+	by, _ := hdr.b.exif.PixelYDimension()
+	cy, _ := hdr.c.exif.PixelYDimension()
 
-  ax, _ := hdr.a.exif.PixelXDimension()
-  bx, _ := hdr.b.exif.PixelXDimension()
-  cx, _ := hdr.c.exif.PixelXDimension()
+	ax, _ := hdr.a.exif.PixelXDimension()
+	bx, _ := hdr.b.exif.PixelXDimension()
+	cx, _ := hdr.c.exif.PixelXDimension()
 
-  abias, _ := hdr.a.exif.ExposureBiasValue()
-  bbias, _ := hdr.b.exif.ExposureBiasValue()
-  cbias, _ := hdr.c.exif.ExposureBiasValue()
+	abias, _ := hdr.a.exif.ExposureBiasValue()
+	bbias, _ := hdr.b.exif.ExposureBiasValue()
+	cbias, _ := hdr.c.exif.ExposureBiasValue()
 
-  if ax != bx || bx != cx {
-    // fmt.Println("Skipping: x dimension mismatch", ax, bx, cx)
-    return false
-  }
+	if ax != bx || bx != cx {
+		// fmt.Println("Skipping: x dimension mismatch", ax, bx, cx)
+		return false
+	}
 
-  if ay != by || by != cy {
-    // fmt.Println("Skipping: y dimension mismatch", ay, by, cy)
-    return false
-  }
+	if ay != by || by != cy {
+		// fmt.Println("Skipping: y dimension mismatch", ay, by, cy)
+		return false
+	}
 
-  if abias != "\"0/1\"" || bbias != "\"-2/1\"" || cbias != "\"2/1\"" {
-    // fmt.Println("Skipping: bias mismatch", abias, bbias, cbias)
-    return false
-  }
+	if abias != "\"0/1\"" || bbias != "\"-2/1\"" || cbias != "\"2/1\"" {
+		// fmt.Println("Skipping: bias mismatch", abias, bbias, cbias)
+		return false
+	}
 
-  return true
+	return true
 }
 
 func (hdr *Hdr) Images() []*Image {
-  return []*Image{
-    hdr.a,
-    hdr.b,
-    hdr.c,
-  }
+	return []*Image{
+		hdr.a,
+		hdr.b,
+		hdr.c,
+	}
 }
 
 type FileFinderFunc filepath.WalkFunc
 
 type FileFinder interface {
-  Find(fileFinderFn FileFinderFunc)
+	Find(fileFinderFn FileFinderFunc)
 }
 
 type FilePathWalker struct {
-  Root string
+	Root string
 }
 
 func (f FilePathWalker) Find(fileFinderFn FileFinderFunc) {
-  filepath.Walk(f.Root, func(path string, info os.FileInfo, err error) error {
-    return fileFinderFn(path, info, err)
-  })
+	filepath.Walk(f.Root, func(path string, info os.FileInfo, err error) error {
+		return fileFinderFn(path, info, err)
+	})
 }
 
 type Decoder interface {
-  Decode(path string) (exif Exif, err error)
+	Decode(path string) (exif Exif, err error)
 }
 
-type ExifDecoder struct {}
+type ExifDecoder struct{}
 
 func (d *ExifDecoder) Decode(path string) (Exif, error) {
-  f, err := os.Open(path)
-  if err != nil {
-      return nil, err
-  }
-  defer f.Close()
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
 
-  w := new(exifWrapper)
-  w.exif, err = exif.Decode(f)
-  if err != nil {
-    return nil, err
-  }
-  return w, nil
+	w := new(exifWrapper)
+	w.exif, err = exif.Decode(f)
+	if err != nil {
+		return nil, err
+	}
+	return w, nil
 }
 
 type HdrFunc func(hdr *Hdr)
 
 func Find(finder FileFinder, decoder Decoder, hdrFn HdrFunc) {
-  hdr := Hdr{}
+	hdr := Hdr{}
 
-  // See https://golang.org/pkg/path/filepath/#WalkFunc
-  finder.Find(func(path string, info os.FileInfo, err error) error {
-    if err != nil {
-      return err
-    }
+	// See https://golang.org/pkg/path/filepath/#WalkFunc
+	finder.Find(func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 
-    if info != nil && info.IsDir() {
-      return nil
-    }
+		if info != nil && info.IsDir() {
+			return nil
+		}
 
-    ext := filepath.Ext(path)
-    if ext != ".JPG" {
-      return nil
-    }
+		ext := filepath.Ext(path)
+		if ext != ".JPG" {
+			return nil
+		}
 
-    x, err := decoder.Decode(path)
-    if err != nil {
-        fmt.Println(err)
-        return nil
-    }
+		x, err := decoder.Decode(path)
+		if err != nil {
+			fmt.Println(err)
+			return nil
+		}
 
-    hdr.Add(x, path, info)
-    if hdr.IsHdr() {
-      if hdrFn != nil {
-        hdrFn(&hdr)
-      }
-      hdr = Hdr{}
-    }
+		hdr.Add(x, path, info)
+		if hdr.IsHdr() {
+			if hdrFn != nil {
+				hdrFn(&hdr)
+			}
+			hdr = Hdr{}
+		}
 
-    return nil // or SkipDir to skip processng this dir
-  })
+		return nil // or SkipDir to skip processng this dir
+	})
 }
