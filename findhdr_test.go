@@ -11,7 +11,11 @@ import (
 
 func TestHdrIsHdrWhenEmpty(t *testing.T) {
 	hdr := Hdr{}
-	if hdr.IsHdr() {
+	isHdr, err := hdr.IsHdr()
+	if err != nil {
+		t.Error("Unexpected error", err)
+	}
+	if isHdr {
 		t.Error("Expected empty Hdr not to be IsHdr()")
 	}
 }
@@ -30,26 +34,35 @@ type testFileFinder struct {
 // make sure it satisfies the interface
 var _ FileFinder = (*testFileFinder)(nil)
 
-func (f testFileFinder) Find(fileFinderFn FileFinderFunc) {
+func (f testFileFinder) Find(fileFinderFn FileFinderFunc) error {
 	if f.err != nil {
-		fileFinderFn("", nil, f.err)
-	} else {
-		for _, f := range f.files {
-			fileFinderFn(f.path, f.info, f.err)
+		return fileFinderFn("", nil, f.err)
+	}
+
+	for _, f := range f.files {
+		if err := fileFinderFn(f.path, f.info, f.err); err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
 func TestFindNonExistantDirectory(t *testing.T) {
-	Find(testFileFinder{err: os.ErrNotExist}, &ExifDecoder{}, func(hdr *Hdr) {
+	err := Find(testFileFinder{err: os.ErrNotExist}, &ExifDecoder{}, func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
+	if err != os.ErrNotExist {
+		t.Error("Expected Find to return error")
+	}
 }
 
 func TestFindEmptyDirectory(t *testing.T) {
-	Find(testFileFinder{}, &ExifDecoder{}, func(hdr *Hdr) {
+	err := Find(testFileFinder{}, &ExifDecoder{}, func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
+	if err != nil {
+		t.Error("Expected no error")
+	}
 }
 
 func TestFindNonImageFiles(t *testing.T) {
@@ -59,9 +72,12 @@ func TestFindNonImageFiles(t *testing.T) {
 		testFile{path: "foo3.txt"},
 	}
 
-	Find(testFileFinder{files: files}, &ExifDecoder{}, func(hdr *Hdr) {
+	err := Find(testFileFinder{files: files}, &ExifDecoder{}, func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
+	if err != nil {
+		t.Error("Expected no error")
+	}
 }
 
 func TestFindNonExistantImageFiles(t *testing.T) {
@@ -71,9 +87,13 @@ func TestFindNonExistantImageFiles(t *testing.T) {
 		testFile{path: "foo3.JPG"},
 	}
 
-	Find(testFileFinder{files: files}, &ExifDecoder{}, func(hdr *Hdr) {
+	err := Find(testFileFinder{files: files}, &ExifDecoder{}, func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
+	if err != nil {
+		// TODO: should this be an error?
+		t.Error("Expected no error")
+	}
 }
 
 type testDecoder struct {
@@ -131,9 +151,12 @@ func TestFindSuccess(t *testing.T) {
 	}
 
 	called := 0
-	Find(testFileFinder{files: files}, &testDecoder{exifs: exifs, errs: errs}, func(hdr *Hdr) {
-		called += 1
+	err := Find(testFileFinder{files: files}, &testDecoder{exifs: exifs, errs: errs}, func(hdr *Hdr) {
+		called++
 	})
+	if err != nil {
+		t.Error("Expected no error")
+	}
 	if called != 1 {
 		t.Errorf("Expected 1 HDR to be found but got %d", called)
 	}

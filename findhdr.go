@@ -20,12 +20,15 @@ import (
 	"github.com/rwcarlsen/goexif/exif"
 )
 
+// Hdr represents a set of images which may -- or may not -- represent valid
+// source inputs for a single merged hdr image. See IsHdr().
 type Hdr struct {
 	a *Image
 	b *Image
 	c *Image
 }
 
+// Image represents a single image and its metadata.
 type Image struct {
 	Path string
 	Info os.FileInfo
@@ -33,6 +36,7 @@ type Image struct {
 	exif Exif
 }
 
+// Exif is the interface that provides access to image metadata.
 type Exif interface {
 	PixelXDimension() (int, error)
 	PixelYDimension() (int, error)
@@ -92,6 +96,7 @@ type exifWrapper struct {
 	exif *exif.Exif
 }
 
+// PixelXDimension returns the width of the image.
 func (wrapper *exifWrapper) PixelXDimension() (val int, err error) {
 	tag, err := wrapper.exif.Get(exif.PixelXDimension)
 	if err != nil {
@@ -106,6 +111,7 @@ func (wrapper *exifWrapper) PixelXDimension() (val int, err error) {
 	return
 }
 
+// PixelYDimension returns the height of the image.
 func (wrapper *exifWrapper) PixelYDimension() (val int, err error) {
 	tag, err := wrapper.exif.Get(exif.PixelYDimension)
 	if err != nil {
@@ -120,6 +126,11 @@ func (wrapper *exifWrapper) PixelYDimension() (val int, err error) {
 	return
 }
 
+// ExposureBiasValue returns the exposure bias value for the image. This is a
+// string in the form "X/1":
+// - "0/1" for normal
+// - "-2/1" for darker
+// - "2/1" for lighter)
 func (wrapper *exifWrapper) ExposureBiasValue() (val string, err error) {
 	tag, err := wrapper.exif.Get(exif.ExposureBiasValue)
 	if err != nil {
@@ -130,6 +141,7 @@ func (wrapper *exifWrapper) ExposureBiasValue() (val string, err error) {
 	return
 }
 
+// Add adds a candidate image to an Hdr.
 func (hdr *Hdr) Add(x Exif, path string, info os.FileInfo) {
 	img := &Image{path, info, x}
 	if hdr.a == nil {
@@ -149,42 +161,73 @@ func (hdr *Hdr) String() string {
 	return fmt.Sprintf("[%s, %s, %s]", hdr.a.Info.Name(), hdr.b.Info.Name(), hdr.c.Info.Name())
 }
 
-func (hdr *Hdr) IsHdr() bool {
+// IsHdr returns true if the Hdr contains a valid set of source images which can be
+// merged into a single hdr image. Source images must have identical dimensions
+// (width and height) and unique exposure bias values (0/1, -2/1, and 2/1).
+func (hdr *Hdr) IsHdr() (bool, error) {
 	if hdr.a == nil || hdr.b == nil || hdr.c == nil {
 		// fmt.Println("Skipping: insufficient candidates")
-		return false
+		return false, nil
 	}
 
-	ay, _ := hdr.a.exif.PixelYDimension()
-	by, _ := hdr.b.exif.PixelYDimension()
-	cy, _ := hdr.c.exif.PixelYDimension()
+	ay, err := hdr.a.exif.PixelYDimension()
+	if err != nil {
+		return false, err
+	}
+	by, err := hdr.b.exif.PixelYDimension()
+	if err != nil {
+		return false, err
+	}
+	cy, err := hdr.c.exif.PixelYDimension()
+	if err != nil {
+		return false, err
+	}
 
-	ax, _ := hdr.a.exif.PixelXDimension()
-	bx, _ := hdr.b.exif.PixelXDimension()
-	cx, _ := hdr.c.exif.PixelXDimension()
+	ax, err := hdr.a.exif.PixelXDimension()
+	if err != nil {
+		return false, err
+	}
+	bx, err := hdr.b.exif.PixelXDimension()
+	if err != nil {
+		return false, err
+	}
+	cx, err := hdr.c.exif.PixelXDimension()
+	if err != nil {
+		return false, err
+	}
 
-	abias, _ := hdr.a.exif.ExposureBiasValue()
-	bbias, _ := hdr.b.exif.ExposureBiasValue()
-	cbias, _ := hdr.c.exif.ExposureBiasValue()
+	abias, err := hdr.a.exif.ExposureBiasValue()
+	if err != nil {
+		return false, err
+	}
+	bbias, err := hdr.b.exif.ExposureBiasValue()
+	if err != nil {
+		return false, err
+	}
+	cbias, err := hdr.c.exif.ExposureBiasValue()
+	if err != nil {
+		return false, err
+	}
 
 	if ax != bx || bx != cx {
 		// fmt.Println("Skipping: x dimension mismatch", ax, bx, cx)
-		return false
+		return false, nil
 	}
 
 	if ay != by || by != cy {
 		// fmt.Println("Skipping: y dimension mismatch", ay, by, cy)
-		return false
+		return false, nil
 	}
 
 	if abias != "\"0/1\"" || bbias != "\"-2/1\"" || cbias != "\"2/1\"" {
 		// fmt.Println("Skipping: bias mismatch", abias, bbias, cbias)
-		return false
+		return false, nil
 	}
 
-	return true
+	return true, nil
 }
 
+// Images returns the candidate images in this Hdr.
 func (hdr *Hdr) Images() []*Image {
 	return []*Image{
 		hdr.a,
@@ -193,28 +236,42 @@ func (hdr *Hdr) Images() []*Image {
 	}
 }
 
+// FileFinderFunc is a function that ...
+// TODO: document
 type FileFinderFunc filepath.WalkFunc
 
+// FileFinder ...
+// TODO: document
 type FileFinder interface {
-	Find(fileFinderFn FileFinderFunc)
+	Find(fileFinderFn FileFinderFunc) error
 }
 
+// FilePathWalker ...
+// TODO: document
 type FilePathWalker struct {
 	Root string
 }
 
-func (f FilePathWalker) Find(fileFinderFn FileFinderFunc) {
-	filepath.Walk(f.Root, func(path string, info os.FileInfo, err error) error {
+// Find ...
+// TODO: document
+func (f FilePathWalker) Find(fileFinderFn FileFinderFunc) error {
+	return filepath.Walk(f.Root, func(path string, info os.FileInfo, err error) error {
 		return fileFinderFn(path, info, err)
 	})
 }
 
+// Decoder ...
+// TODO: document
 type Decoder interface {
 	Decode(path string) (exif Exif, err error)
 }
 
+// ExifDecoder ...
+// TODO: document
 type ExifDecoder struct{}
 
+// Decode ...
+// TODO: document
 func (d *ExifDecoder) Decode(path string) (Exif, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -230,13 +287,17 @@ func (d *ExifDecoder) Decode(path string) (Exif, error) {
 	return w, nil
 }
 
+// HdrFunc ...
+// TODO: document
 type HdrFunc func(hdr *Hdr)
 
-func Find(finder FileFinder, decoder Decoder, hdrFn HdrFunc) {
+// Find ...
+// TODO: document
+func Find(finder FileFinder, decoder Decoder, hdrFn HdrFunc) error {
 	hdr := Hdr{}
 
 	// See https://golang.org/pkg/path/filepath/#WalkFunc
-	finder.Find(func(path string, info os.FileInfo, err error) error {
+	return finder.Find(func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -257,7 +318,14 @@ func Find(finder FileFinder, decoder Decoder, hdrFn HdrFunc) {
 		}
 
 		hdr.Add(x, path, info)
-		if hdr.IsHdr() {
+
+		isHdr, err := hdr.IsHdr()
+		if err != nil {
+			fmt.Println(err)
+			return nil
+		}
+
+		if isHdr {
 			if hdrFn != nil {
 				hdrFn(&hdr)
 			}
