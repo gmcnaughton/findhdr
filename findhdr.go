@@ -5,11 +5,10 @@ TODO
 ----
 - what about configurable # of shots?
 - allow any variation of bias values
-- error handling, holy sweet jesus and mary - where do the errs go?
 - should we really be treating bias value as a string? why didn't StringVal() work?
 - support non-JPG filenames
 - print out some stats afterwards
-- configurable verbosity, please!
+- configurable verbosity!
 */
 
 import (
@@ -20,15 +19,16 @@ import (
 	"github.com/rwcarlsen/goexif/exif"
 )
 
-// Hdr represents a set of images which may -- or may not -- represent valid
-// source inputs for a single merged hdr image. See IsHdr().
+// Hdr represents a set of candidate images which may -- or may not -- represent
+// valid sources for a single merged hdr image. See IsHdr() for details on
+// what constitues valid sources.
 type Hdr struct {
 	a *Image
 	b *Image
 	c *Image
 }
 
-// Image represents a single image and its metadata.
+// Image represents a single image file and its metadata.
 type Image struct {
 	Path string
 	Info os.FileInfo
@@ -36,7 +36,7 @@ type Image struct {
 	exif Exif
 }
 
-// Exif is the interface that provides access to image metadata.
+// Exif is an interface providing access to image metadata.
 type Exif interface {
 	PixelXDimension() (int, error)
 	PixelYDimension() (int, error)
@@ -44,6 +44,8 @@ type Exif interface {
 }
 
 /*
+Metadata available from exif.Exif:
+
 *exif.Exif, DateTime: "2017:02:26 13:04:32"
 ExifVersion: "0221"
 DateTimeOriginal: "2017:02:26 13:04:32"
@@ -100,14 +102,10 @@ type exifWrapper struct {
 func (wrapper *exifWrapper) PixelXDimension() (val int, err error) {
 	tag, err := wrapper.exif.Get(exif.PixelXDimension)
 	if err != nil {
-		return 0, err
+		return
 	}
 
 	val, err = tag.Int(0)
-	if err != nil {
-		return 0, err
-	}
-
 	return
 }
 
@@ -115,26 +113,22 @@ func (wrapper *exifWrapper) PixelXDimension() (val int, err error) {
 func (wrapper *exifWrapper) PixelYDimension() (val int, err error) {
 	tag, err := wrapper.exif.Get(exif.PixelYDimension)
 	if err != nil {
-		return 0, err
+		return
 	}
 
 	val, err = tag.Int(0)
-	if err != nil {
-		return 0, err
-	}
-
 	return
 }
 
-// ExposureBiasValue returns the exposure bias value for the image. This is a
-// string in the form "X/1":
+// ExposureBiasValue returns the exposure bias value (exposure compensation)
+// for the image. This is a string in the form "X/1" (NOTE: including the double-quotes):
 // - "0/1" for normal
 // - "-2/1" for darker
 // - "2/1" for lighter)
 func (wrapper *exifWrapper) ExposureBiasValue() (val string, err error) {
 	tag, err := wrapper.exif.Get(exif.ExposureBiasValue)
 	if err != nil {
-		return "", err
+		return
 	}
 
 	val = tag.String()
@@ -163,7 +157,7 @@ func (hdr *Hdr) String() string {
 
 // IsHdr returns true if the Hdr contains a valid set of source images which can be
 // merged into a single hdr image. Source images must have identical dimensions
-// (width and height) and unique exposure bias values (0/1, -2/1, and 2/1).
+// but unique exposure bias values (e.g., "0/1", "-2/1", and "2/1").
 func (hdr *Hdr) IsHdr() (bool, error) {
 	if hdr.a == nil || hdr.b == nil || hdr.c == nil {
 		// fmt.Println("Skipping: insufficient candidates")
@@ -236,42 +230,42 @@ func (hdr *Hdr) Images() []*Image {
 	}
 }
 
-// FileFinderFunc is a function that ...
-// TODO: document
+// FileFinderFunc is the type of the function called for each file or directory
+// visited by Find.
 type FileFinderFunc filepath.WalkFunc
 
-// FileFinder ...
-// TODO: document
+// FileFinder is the interface providing a list of files or directories to
+// process via the Find method.
 type FileFinder interface {
 	Find(fileFinderFn FileFinderFunc) error
 }
 
-// FilePathWalker ...
-// TODO: document
+// FilePathWalker is a FileFinder using filepath.Walk to visit all files
+// and directories in the given root path.
 type FilePathWalker struct {
 	Root string
 }
 
-// Find ...
-// TODO: document
+// Find walks the file tree rooted at root, calling fileFinderFn for each file or
+// directory in the tree, including root.
 func (f FilePathWalker) Find(fileFinderFn FileFinderFunc) error {
 	return filepath.Walk(f.Root, func(path string, info os.FileInfo, err error) error {
 		return fileFinderFn(path, info, err)
 	})
 }
 
-// Decoder ...
-// TODO: document
+// Decoder is the interface providing exif metadata for an image file via the
+// Decode method.
 type Decoder interface {
 	Decode(path string) (exif Exif, err error)
 }
 
-// ExifDecoder ...
-// TODO: document
+// ExifDecoder is a Decoder using exif.Exif to extract exif tags from an image file.
 type ExifDecoder struct{}
 
-// Decode ...
-// TODO: document
+// Decode returns Exif metadata for an image file. If the file does not exist,
+// we do not have permission to read it, or if any other error occurs while
+// extracting metadata from the image, it will be returned along with nil metadata.
 func (d *ExifDecoder) Decode(path string) (Exif, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -287,12 +281,13 @@ func (d *ExifDecoder) Decode(path string) (Exif, error) {
 	return w, nil
 }
 
-// HdrFunc ...
-// TODO: document
+// HdrFunc is the type of the function called for each valid Hdr found by Find.
 type HdrFunc func(hdr *Hdr)
 
-// Find ...
-// TODO: document
+// Find visits all files found by the file finder, tests if they are images,
+// uses the decoder to extract their metadata, and adds them to a candidate Hdr.
+// Every valid Hdr found this way is delivered to HdrFunc (see IsHdr() for
+// details on what constitutes a valid hdr).
 func Find(finder FileFinder, decoder Decoder, hdrFn HdrFunc) error {
 	hdr := Hdr{}
 
