@@ -45,8 +45,8 @@ func main() {
 
 	count := 0
 
-	finder := findhdr.FilePathWalker{Root: inpath}
-	decoder := &findhdr.ExifDecoder{}
+	finder := findhdr.NewFileFinder(inpath)
+	decoder := findhdr.NewDecoder()
 	err := findhdr.Find(finder, decoder, func(hdr *findhdr.Hdr) {
 		count++
 

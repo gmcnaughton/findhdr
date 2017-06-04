@@ -48,7 +48,7 @@ func (f testFileFinder) Find(fileFinderFn FileFinderFunc) error {
 }
 
 func TestFindNonExistantDirectory(t *testing.T) {
-	err := Find(testFileFinder{err: os.ErrNotExist}, &ExifDecoder{}, func(hdr *Hdr) {
+	err := Find(testFileFinder{err: os.ErrNotExist}, NewDecoder(), func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
 	if err != os.ErrNotExist {
@@ -57,7 +57,7 @@ func TestFindNonExistantDirectory(t *testing.T) {
 }
 
 func TestFindEmptyDirectory(t *testing.T) {
-	err := Find(testFileFinder{}, &ExifDecoder{}, func(hdr *Hdr) {
+	err := Find(testFileFinder{}, NewDecoder(), func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
 	if err != nil {
@@ -72,7 +72,7 @@ func TestFindNonImageFiles(t *testing.T) {
 		testFile{path: "foo3.txt"},
 	}
 
-	err := Find(testFileFinder{files: files}, &ExifDecoder{}, func(hdr *Hdr) {
+	err := Find(testFileFinder{files: files}, NewDecoder(), func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
 	if err != nil {
@@ -87,7 +87,7 @@ func TestFindNonExistantImageFiles(t *testing.T) {
 		testFile{path: "foo3.JPG"},
 	}
 
-	err := Find(testFileFinder{files: files}, &ExifDecoder{}, func(hdr *Hdr) {
+	err := Find(testFileFinder{files: files}, NewDecoder(), func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
 	if err != nil {
@@ -97,7 +97,7 @@ func TestFindNonExistantImageFiles(t *testing.T) {
 }
 
 type testDecoder struct {
-	exifs []Exif
+	metas []ImageMeta
 	errs  []error
 	calls int
 }
@@ -105,30 +105,30 @@ type testDecoder struct {
 // make sure it satisfies the interface
 var _ Decoder = (*testDecoder)(nil)
 
-func (decoder *testDecoder) Decode(path string) (exif Exif, err error) {
+func (decoder *testDecoder) Decode(path string) (meta ImageMeta, err error) {
 	decoder.calls++
-	return decoder.exifs[decoder.calls-1], decoder.errs[decoder.calls-1]
+	return decoder.metas[decoder.calls-1], decoder.errs[decoder.calls-1]
 }
 
-type testExif struct {
+type testImageMeta struct {
 	xdim int
 	ydim int
 	bias string
 }
 
 // make sure it satisfies the interface
-var _ Exif = (*testExif)(nil)
+var _ ImageMeta = (*testImageMeta)(nil)
 
-func (exif *testExif) PixelXDimension() (val int, err error) {
-	return exif.xdim, nil
+func (m *testImageMeta) PixelXDimension() (val int, err error) {
+	return m.xdim, nil
 }
 
-func (exif *testExif) PixelYDimension() (val int, err error) {
-	return exif.ydim, nil
+func (m *testImageMeta) PixelYDimension() (val int, err error) {
+	return m.ydim, nil
 }
 
-func (exif *testExif) ExposureBiasValue() (val string, err error) {
-	return fmt.Sprintf("\"%s\"", exif.bias), nil
+func (m *testImageMeta) ExposureBiasValue() (val string, err error) {
+	return fmt.Sprintf("\"%s\"", m.bias), nil
 }
 
 func TestFindSuccess(t *testing.T) {
@@ -138,10 +138,10 @@ func TestFindSuccess(t *testing.T) {
 		testFile{path: "foo3.JPG"},
 	}
 
-	exifs := []Exif{
-		&testExif{200, 100, "0/1"},
-		&testExif{200, 100, "-2/1"},
-		&testExif{200, 100, "2/1"},
+	metas := []ImageMeta{
+		&testImageMeta{200, 100, "0/1"},
+		&testImageMeta{200, 100, "-2/1"},
+		&testImageMeta{200, 100, "2/1"},
 	}
 
 	errs := []error{
@@ -151,7 +151,7 @@ func TestFindSuccess(t *testing.T) {
 	}
 
 	called := 0
-	err := Find(testFileFinder{files: files}, &testDecoder{exifs: exifs, errs: errs}, func(hdr *Hdr) {
+	err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, func(hdr *Hdr) {
 		called++
 	})
 	if err != nil {

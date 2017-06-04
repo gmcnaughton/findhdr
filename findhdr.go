@@ -32,12 +32,11 @@ type Hdr struct {
 type Image struct {
 	Path string
 	Info os.FileInfo
-
-	exif Exif
+	Meta ImageMeta
 }
 
-// Exif is an interface providing access to image metadata.
-type Exif interface {
+// ImageMeta is an interface providing access to image metadata.
+type ImageMeta interface {
 	PixelXDimension() (int, error)
 	PixelYDimension() (int, error)
 	ExposureBiasValue() (string, error)
@@ -94,13 +93,13 @@ FlashpixVersion: "0100"
 FocalPlaneYResolution: "3456000/595"
 XResolution: "72/1"
 */
-type exifWrapper struct {
+type exifMeta struct {
 	exif *exif.Exif
 }
 
 // PixelXDimension returns the width of the image.
-func (wrapper *exifWrapper) PixelXDimension() (val int, err error) {
-	tag, err := wrapper.exif.Get(exif.PixelXDimension)
+func (e *exifMeta) PixelXDimension() (val int, err error) {
+	tag, err := e.exif.Get(exif.PixelXDimension)
 	if err != nil {
 		return
 	}
@@ -110,8 +109,8 @@ func (wrapper *exifWrapper) PixelXDimension() (val int, err error) {
 }
 
 // PixelYDimension returns the height of the image.
-func (wrapper *exifWrapper) PixelYDimension() (val int, err error) {
-	tag, err := wrapper.exif.Get(exif.PixelYDimension)
+func (e *exifMeta) PixelYDimension() (val int, err error) {
+	tag, err := e.exif.Get(exif.PixelYDimension)
 	if err != nil {
 		return
 	}
@@ -125,8 +124,8 @@ func (wrapper *exifWrapper) PixelYDimension() (val int, err error) {
 // - "0/1" for normal
 // - "-2/1" for darker
 // - "2/1" for lighter)
-func (wrapper *exifWrapper) ExposureBiasValue() (val string, err error) {
-	tag, err := wrapper.exif.Get(exif.ExposureBiasValue)
+func (e *exifMeta) ExposureBiasValue() (val string, err error) {
+	tag, err := e.exif.Get(exif.ExposureBiasValue)
 	if err != nil {
 		return
 	}
@@ -136,8 +135,8 @@ func (wrapper *exifWrapper) ExposureBiasValue() (val string, err error) {
 }
 
 // Add adds a candidate image to an Hdr.
-func (hdr *Hdr) Add(x Exif, path string, info os.FileInfo) {
-	img := &Image{path, info, x}
+func (hdr *Hdr) Add(meta ImageMeta, path string, info os.FileInfo) {
+	img := &Image{Path: path, Info: info, Meta: meta}
 	if hdr.a == nil {
 		hdr.a = img
 	} else if hdr.b == nil {
@@ -164,41 +163,41 @@ func (hdr *Hdr) IsHdr() (bool, error) {
 		return false, nil
 	}
 
-	ay, err := hdr.a.exif.PixelYDimension()
+	ay, err := hdr.a.Meta.PixelYDimension()
 	if err != nil {
 		return false, err
 	}
-	by, err := hdr.b.exif.PixelYDimension()
+	by, err := hdr.b.Meta.PixelYDimension()
 	if err != nil {
 		return false, err
 	}
-	cy, err := hdr.c.exif.PixelYDimension()
-	if err != nil {
-		return false, err
-	}
-
-	ax, err := hdr.a.exif.PixelXDimension()
-	if err != nil {
-		return false, err
-	}
-	bx, err := hdr.b.exif.PixelXDimension()
-	if err != nil {
-		return false, err
-	}
-	cx, err := hdr.c.exif.PixelXDimension()
+	cy, err := hdr.c.Meta.PixelYDimension()
 	if err != nil {
 		return false, err
 	}
 
-	abias, err := hdr.a.exif.ExposureBiasValue()
+	ax, err := hdr.a.Meta.PixelXDimension()
 	if err != nil {
 		return false, err
 	}
-	bbias, err := hdr.b.exif.ExposureBiasValue()
+	bx, err := hdr.b.Meta.PixelXDimension()
 	if err != nil {
 		return false, err
 	}
-	cbias, err := hdr.c.exif.ExposureBiasValue()
+	cx, err := hdr.c.Meta.PixelXDimension()
+	if err != nil {
+		return false, err
+	}
+
+	abias, err := hdr.a.Meta.ExposureBiasValue()
+	if err != nil {
+		return false, err
+	}
+	bbias, err := hdr.b.Meta.ExposureBiasValue()
+	if err != nil {
+		return false, err
+	}
+	cbias, err := hdr.c.Meta.ExposureBiasValue()
 	if err != nil {
 		return false, err
 	}
@@ -240,15 +239,20 @@ type FileFinder interface {
 	Find(fileFinderFn FileFinderFunc) error
 }
 
-// FilePathWalker is a FileFinder using filepath.Walk to visit all files
+// filePathWalker is a FileFinder using filepath.Walk to visit all files
 // and directories in the given root path.
-type FilePathWalker struct {
+type filePathWalker struct {
 	Root string
+}
+
+// NewFileFinder returns a FileFinder which walks all files in the given directory.
+func NewFileFinder(path string) FileFinder {
+	return filePathWalker{Root: path}
 }
 
 // Find walks the file tree rooted at root, calling fileFinderFn for each file or
 // directory in the tree, including root.
-func (f FilePathWalker) Find(fileFinderFn FileFinderFunc) error {
+func (f filePathWalker) Find(fileFinderFn FileFinderFunc) error {
 	return filepath.Walk(f.Root, func(path string, info os.FileInfo, err error) error {
 		return fileFinderFn(path, info, err)
 	})
@@ -257,23 +261,28 @@ func (f FilePathWalker) Find(fileFinderFn FileFinderFunc) error {
 // Decoder is the interface providing exif metadata for an image file via the
 // Decode method.
 type Decoder interface {
-	Decode(path string) (exif Exif, err error)
+	Decode(path string) (meta ImageMeta, err error)
 }
 
-// ExifDecoder is a Decoder using exif.Exif to extract exif tags from an image file.
-type ExifDecoder struct{}
+// exifDecoder is a Decoder using exif.Exif to extract exif tags from an image file.
+type exifDecoder struct{}
+
+// NewDecoder returns a Decoder using exif.Exif to extract exif tags from an image file.
+func NewDecoder() Decoder {
+	return &exifDecoder{}
+}
 
 // Decode returns Exif metadata for an image file. If the file does not exist,
 // we do not have permission to read it, or if any other error occurs while
 // extracting metadata from the image, it will be returned along with nil metadata.
-func (d *ExifDecoder) Decode(path string) (Exif, error) {
+func (d *exifDecoder) Decode(path string) (ImageMeta, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 
-	w := new(exifWrapper)
+	w := new(exifMeta)
 	w.exif, err = exif.Decode(f)
 	if err != nil {
 		return nil, err
