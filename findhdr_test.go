@@ -131,6 +131,90 @@ func (m *testImageMeta) ExposureBiasValue() (val string, err error) {
 	return fmt.Sprintf("\"%s\"", m.bias), nil
 }
 
+func TestXDimensionMismatch(t *testing.T) {
+	files := []testFile{
+		testFile{path: "foo1.JPG"},
+		testFile{path: "foo2.JPG"},
+		testFile{path: "foo3.JPG"},
+	}
+
+	metas := []ImageMeta{
+		&testImageMeta{200, 100, "0/1"},
+		&testImageMeta{200, 100, "-2/1"},
+		&testImageMeta{201, 100, "2/1"},
+	}
+
+	errs := []error{
+		nil,
+		nil,
+		nil,
+	}
+
+	err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, func(hdr *Hdr) {
+		t.Error("Expected no HDRs to be found")
+	})
+	if err != nil {
+		// TODO: should this be an error?
+		t.Error("Expected no error")
+	}
+}
+
+func TestYDimensionMismatch(t *testing.T) {
+	files := []testFile{
+		testFile{path: "foo1.JPG"},
+		testFile{path: "foo2.JPG"},
+		testFile{path: "foo3.JPG"},
+	}
+
+	metas := []ImageMeta{
+		&testImageMeta{200, 100, "0/1"},
+		&testImageMeta{200, 100, "-2/1"},
+		&testImageMeta{200, 101, "2/1"},
+	}
+
+	errs := []error{
+		nil,
+		nil,
+		nil,
+	}
+
+	err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, func(hdr *Hdr) {
+		t.Error("Expected no HDRs to be found")
+	})
+	if err != nil {
+		// TODO: should this be an error?
+		t.Error("Expected no error")
+	}
+}
+
+func TestDuplicateBiasValue(t *testing.T) {
+	files := []testFile{
+		testFile{path: "foo1.JPG"},
+		testFile{path: "foo2.JPG"},
+		testFile{path: "foo3.JPG"},
+	}
+
+	metas := []ImageMeta{
+		&testImageMeta{200, 100, "0/1"},
+		&testImageMeta{200, 100, "-2/1"},
+		&testImageMeta{200, 100, "0/1"},
+	}
+
+	errs := []error{
+		nil,
+		nil,
+		nil,
+	}
+
+	err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, func(hdr *Hdr) {
+		t.Error("Expected no HDRs to be found")
+	})
+	if err != nil {
+		// TODO: should this be an error?
+		t.Error("Expected no error")
+	}
+}
+
 func TestFindSuccess(t *testing.T) {
 	files := []testFile{
 		testFile{path: "foo1.JPG"},

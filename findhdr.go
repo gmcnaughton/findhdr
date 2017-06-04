@@ -158,65 +158,68 @@ func (hdr *Hdr) String() string {
 // merged into a single hdr image. Source images must have identical dimensions
 // but unique exposure bias values (e.g., "0/1", "-2/1", and "2/1").
 func (hdr *Hdr) IsHdr() (bool, error) {
-	if hdr.a == nil || hdr.b == nil || hdr.c == nil {
+	sufficient := hdr.sufficientImages()
+	if !sufficient {
 		// fmt.Println("Skipping: insufficient candidates")
 		return false, nil
 	}
 
-	ay, err := hdr.a.Meta.PixelYDimension()
-	if err != nil {
-		return false, err
-	}
-	by, err := hdr.b.Meta.PixelYDimension()
-	if err != nil {
-		return false, err
-	}
-	cy, err := hdr.c.Meta.PixelYDimension()
-	if err != nil {
-		return false, err
-	}
-
-	ax, err := hdr.a.Meta.PixelXDimension()
-	if err != nil {
-		return false, err
-	}
-	bx, err := hdr.b.Meta.PixelXDimension()
-	if err != nil {
-		return false, err
-	}
-	cx, err := hdr.c.Meta.PixelXDimension()
-	if err != nil {
-		return false, err
-	}
-
-	abias, err := hdr.a.Meta.ExposureBiasValue()
-	if err != nil {
-		return false, err
-	}
-	bbias, err := hdr.b.Meta.ExposureBiasValue()
-	if err != nil {
-		return false, err
-	}
-	cbias, err := hdr.c.Meta.ExposureBiasValue()
-	if err != nil {
-		return false, err
-	}
-
-	if ax != bx || bx != cx {
+	if match, err := hdr.dimensionsMatch(); err != nil || !match {
 		// fmt.Println("Skipping: x dimension mismatch", ax, bx, cx)
-		return false, nil
+		return match, err
 	}
 
-	if ay != by || by != cy {
-		// fmt.Println("Skipping: y dimension mismatch", ay, by, cy)
-		return false, nil
-	}
-
-	if abias != "\"0/1\"" || bbias != "\"-2/1\"" || cbias != "\"2/1\"" {
+	if unique, err := hdr.biasValuesUnique(); err != nil || !unique {
 		// fmt.Println("Skipping: bias mismatch", abias, bbias, cbias)
-		return false, nil
+		return unique, err
 	}
 
+	return true, nil
+}
+
+func (hdr *Hdr) sufficientImages() bool {
+	return !(hdr.a == nil || hdr.b == nil || hdr.c == nil)
+}
+
+func (hdr *Hdr) dimensionsMatch() (bool, error) {
+	ydim, xdim := 0, 0
+	for _, img := range hdr.Images() {
+		y, err := img.Meta.PixelYDimension()
+		if err != nil {
+			return false, err
+		}
+		x, err := img.Meta.PixelXDimension()
+		if err != nil {
+			return false, err
+		}
+		if ydim == 0 {
+			ydim = y
+		} else if y != ydim {
+			return false, nil
+		}
+		if xdim == 0 {
+			xdim = x
+		} else if x != xdim {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+func (hdr *Hdr) biasValuesUnique() (bool, error) {
+	biases := map[string]bool{}
+	for _, img := range hdr.Images() {
+		bias, err := img.Meta.ExposureBiasValue()
+		if err != nil {
+			return false, err
+		}
+
+		if _, ok := biases[bias]; ok {
+			return false, nil
+		}
+		biases[bias] = true
+	}
 	return true, nil
 }
 
