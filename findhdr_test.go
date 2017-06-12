@@ -36,7 +36,7 @@ var _ FileFinder = (*testFileFinder)(nil)
 
 func (f testFileFinder) Find(fileFinderFn FileFinderFunc) error {
 	if f.err != nil {
-		return fileFinderFn("", nil, f.err)
+		return f.err
 	}
 
 	for _, f := range f.files {
@@ -131,31 +131,66 @@ func (m *testImageMeta) ExposureBiasValue() (val string, err error) {
 	return fmt.Sprintf("\"%s\"", m.bias), nil
 }
 
-func TestXDimensionMismatch(t *testing.T) {
-	files := []testFile{
-		testFile{path: "foo1.JPG"},
-		testFile{path: "foo2.JPG"},
-		testFile{path: "foo3.JPG"},
-	}
+type findtestcase struct {
+	path string
+	xdim int
+	ydim int
+	bias string
+	err  error
+}
 
-	metas := []ImageMeta{
-		&testImageMeta{200, 100, "0/1"},
-		&testImageMeta{200, 100, "-2/1"},
-		&testImageMeta{201, 100, "2/1"},
-	}
+var findtests = []struct {
+	in  []findtestcase
+	err error
+	out bool
+}{
+	{[]findtestcase{
+		{"a.JPG", 200, 100, "0/1", nil},
+		{"b.JPG", 200, 100, "-2/1", nil},
+		{"c.JPG", 200, 100, "2/1", nil},
+	}, nil, true},
+	{[]findtestcase{
+		{"a.jpg", 200, 100, "0/1", nil},
+		{"b.JPEG", 200, 100, "-2/1", nil},
+		{"c.crw", 200, 100, "2/1", nil}, // Canon RAW (.crw)
+	}, nil, true},
+	{[]findtestcase{
+		{"a.JPG", 200, 100, "0/1", nil},
+		{"b.JPG", 200, 100, "-2/1", nil},
+		{"c.JPG", 201, 100, "2/1", nil},
+	}, nil, false},
+	{[]findtestcase{
+		{"a.JPG", 200, 100, "0/1", nil},
+		{"b.JPG", 200, 100, "-2/1", nil},
+		{"c.JPG", 200, 101, "2/1", nil},
+	}, nil, false},
+	{[]findtestcase{
+		{"a.JPG", 200, 100, "0/1", nil},
+		{"b.JPG", 200, 100, "-2/1", nil},
+	}, nil, false},
+}
 
-	errs := []error{
-		nil,
-		nil,
-		nil,
-	}
+func TestFind(t *testing.T) {
+	for _, tt := range findtests {
+		files := make([]testFile, 0, len(tt.in))
+		metas := make([]ImageMeta, 0, len(tt.in))
+		errs := make([]error, 0, len(tt.in))
+		for _, tc := range tt.in {
+			files = append(files, testFile{tc.path, nil, nil})
+			metas = append(metas, &testImageMeta{tc.xdim, tc.ydim, tc.bias})
+			errs = append(errs, tc.err)
+		}
 
-	err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, func(hdr *Hdr) {
-		t.Error("Expected no HDRs to be found")
-	})
-	if err != nil {
-		// TODO: should this be an error?
-		t.Error("Expected no error")
+		found := false
+		err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, func(hdr *Hdr) {
+			found = true
+		})
+		if err != tt.err {
+			t.Errorf("TestFind(%v) => err %v, wanted err %v", tt, err, tt.err)
+		}
+		if found != tt.out {
+			t.Errorf("TestFind(%v) => %v, wanted %v", tt, found, tt.out)
+		}
 	}
 }
 

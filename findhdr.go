@@ -13,11 +13,17 @@ TODO
 
 import (
 	"fmt"
+	"mime"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/rwcarlsen/goexif/exif"
 )
+
+func init() {
+	addMimeTypes()
+}
 
 // Hdr represents a set of candidate images which may -- or may not -- represent
 // valid sources for a single merged hdr image. See IsHdr() for details on
@@ -313,8 +319,7 @@ func Find(finder FileFinder, decoder Decoder, hdrFn HdrFunc) error {
 			return nil
 		}
 
-		ext := filepath.Ext(path)
-		if ext != ".JPG" {
+		if isimage := hasImageMimeType(path); !isimage {
 			return nil
 		}
 
@@ -341,4 +346,28 @@ func Find(finder FileFinder, decoder Decoder, hdrFn HdrFunc) error {
 
 		return nil // or SkipDir to skip processng this dir
 	})
+}
+
+// hasImageMimeType returns true if the image at the given path has a mime-type of
+// "image/*". Mime types are calculated using mime.TypeByExtension, which
+// understands mime types built in to the system, as well as custom mime types
+// mappings which we have added for all known RAW image extensions.
+func hasImageMimeType(path string) bool {
+	ext := filepath.Ext(path)
+	mimetype := mime.TypeByExtension(ext)
+	return strings.HasPrefix(mimetype, "image/")
+}
+
+func addMimeTypes() {
+	// See https://bugs.freedesktop.org/show_bug.cgi?id=8170
+	var mimeTypes = []struct {
+		ext      string
+		mimetype string
+	}{
+		{".crw", "image/x-canon-crw"},
+	}
+
+	for _, mimetype := range mimeTypes {
+		mime.AddExtensionType(mimetype.ext, mimetype.mimetype)
+	}
 }
