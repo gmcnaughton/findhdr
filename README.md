@@ -1,10 +1,10 @@
 # Find Hdr
 
-This repository contains a tool for finding HDR images in directories containing a mix of HDR and non-HDR images (such as imported photos from a digital camerap).
+`findhdr` is a command-line tool for finding HDR source images in directories with a mix of HDR and non-HDR photos (such as your digital camera import after a vacation).
 
-Images are considered part of an HDR if a series of images exist with contiguous file names (*IMG_0001.jpg, IMG_0002.jpg, IMG_003.jpg*) and identical dimensions (*1024x768*), but different exposure bias values (*+2/-2/0*).
+Images are considered HDR sources if they have contiguous file names (*IMG_0001.JPG, IMG_0002.JPG, IMG_003.JPG*), identical dimensions (*5184 x 3456*), and unique exposure bias values (*2/1, -2/1, 0/1*). This indicates a burst of images taken using auto exposure bracketing (AEB).
 
-Images found by `findhdr` can be linked into a target folder, to prepare for batch processing by [Photomatix](https://www.hdrsoft.com/).
+Images found by `findhdr` can be linked into a target folder, in preparation for batch processing by [Photomatix](https://www.hdrsoft.com/).
 
 ### Installation
 
@@ -12,11 +12,11 @@ Images found by `findhdr` can be linked into a target folder, to prepare for bat
 
 ### Usage
 
-Print a list of HDRs found in a directory:
+Print a list of HDR sources in a directory:
 
     findhdr /path/to/photos
 
-Link HDRs found into the `-link` directory:
+Link HDR sources found into the `-link` directory, creating it if necessary:
 
     findhdr -link ./out /path/to/photos
 
@@ -26,4 +26,4 @@ Bug reports and pull requests are welcome on GitHub at https://github.com/gmcnau
 
 ## License
 
-The gem is available as open source under the terms of the [MIT License](http://opensource.org/licenses/MIT).
+The tool is available as open source under the terms of the [MIT License](http://opensource.org/licenses/MIT).
