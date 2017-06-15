@@ -3,12 +3,9 @@ package findhdr
 /*
 TODO
 ----
-- what about configurable # of shots?
-- allow any variation of bias values
 - should we really be treating bias value as a string? why didn't StringVal() work?
-- support non-JPG filenames
 - print out some stats afterwards
-- configurable verbosity!
+- verbose mode!
 */
 
 import (
@@ -18,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/gmcnaughton/go-experiments/circbuf"
 	"github.com/xor-gate/goexif2/exif"
 )
 
@@ -29,9 +27,9 @@ func init() {
 // valid sources for a single merged hdr image. See IsHdr() for details on
 // what constitues valid sources.
 type Hdr struct {
-	a *Image
-	b *Image
-	c *Image
+	images *circbuf.Circbuf
+	min    int
+	max    int
 }
 
 // Image represents a single image file and its metadata.
@@ -140,24 +138,35 @@ func (e *exifMeta) ExposureBiasValue() (val string, err error) {
 	return
 }
 
-// Add adds a candidate image to an Hdr.
-func (hdr *Hdr) Add(meta ImageMeta, path string, info os.FileInfo) {
-	img := &Image{Path: path, Info: info, Meta: meta}
-	if hdr.a == nil {
-		hdr.a = img
-	} else if hdr.b == nil {
-		hdr.b = img
-	} else if hdr.c == nil {
-		hdr.c = img
-	} else {
-		hdr.a = hdr.b
-		hdr.b = hdr.c
-		hdr.c = img
+// NewHdr returns a reference to an initialized Hdr candidate struct.
+func NewHdr(min int, max int) *Hdr {
+	return &Hdr{
+		images: circbuf.New(max),
+		min:    min,
+		max:    max,
 	}
 }
 
+// Add adds a candidate image to an Hdr.
+func (hdr *Hdr) Add(meta ImageMeta, path string, info os.FileInfo) {
+	img := &Image{Path: path, Info: info, Meta: meta}
+	hdr.images.Add(img)
+}
+
 func (hdr *Hdr) String() string {
-	return fmt.Sprintf("[%s, %s, %s]", hdr.a.Info.Name(), hdr.b.Info.Name(), hdr.c.Info.Name())
+	names := []string{}
+	err := hdr.images.Do(func(item interface{}) error {
+		img, ok := item.(*Image)
+		if !ok {
+			return fmt.Errorf("unrecognized type (not Image): %T", item)
+		}
+		names = append(names, img.Info.Name())
+		return nil
+	})
+	if err != nil {
+		return fmt.Sprintf("[error: %v]", err)
+	}
+	return fmt.Sprintf("%v", names)
 }
 
 // IsHdr returns true if the Hdr contains a valid set of source images which can be
@@ -184,58 +193,86 @@ func (hdr *Hdr) IsHdr() (bool, error) {
 }
 
 func (hdr *Hdr) sufficientImages() bool {
-	return !(hdr.a == nil || hdr.b == nil || hdr.c == nil)
+	return hdr.images.Len() >= hdr.min
 }
 
 func (hdr *Hdr) dimensionsMatch() (bool, error) {
 	ydim, xdim := 0, 0
-	for _, img := range hdr.Images() {
+	match := true
+	err := hdr.images.Do(func(item interface{}) error {
+		img, ok := item.(*Image)
+		if !ok {
+			return fmt.Errorf("invalid type: %T", item)
+		}
+
 		y, err := img.Meta.PixelYDimension()
 		if err != nil {
-			return false, err
+			match = false
+			return err
 		}
 		x, err := img.Meta.PixelXDimension()
 		if err != nil {
-			return false, err
+			match = false
+			return err
 		}
 		if ydim == 0 {
 			ydim = y
 		} else if y != ydim {
-			return false, nil
+			match = false
+			return err
 		}
 		if xdim == 0 {
 			xdim = x
 		} else if x != xdim {
-			return false, nil
+			match = false
+			return err
 		}
-	}
-
-	return true, nil
+		return nil
+	})
+	return match, err
 }
 
 func (hdr *Hdr) biasValuesUnique() (bool, error) {
 	biases := map[string]bool{}
-	for _, img := range hdr.Images() {
+	unique := true
+	err := hdr.images.Do(func(item interface{}) error {
+		img, ok := item.(*Image)
+		if !ok {
+			return fmt.Errorf("invalid type: %T", item)
+		}
+
 		bias, err := img.Meta.ExposureBiasValue()
 		if err != nil {
-			return false, err
+			unique = false
+			return err
 		}
 
 		if _, ok := biases[bias]; ok {
-			return false, nil
+			unique = false
+			return err
 		}
 		biases[bias] = true
-	}
-	return true, nil
+		return nil
+	})
+	return unique, err
 }
 
 // Images returns the candidate images in this Hdr.
 func (hdr *Hdr) Images() []*Image {
-	return []*Image{
-		hdr.a,
-		hdr.b,
-		hdr.c,
+	images := make([]*Image, 0, hdr.images.Len())
+	err := hdr.images.Do(func(item interface{}) error {
+		img, ok := item.(*Image)
+		if !ok {
+			return fmt.Errorf("invalid type: %T", item)
+		}
+
+		images = append(images, img)
+		return nil
+	})
+	if err != nil {
+		panic("runtime error: findhdr.Hdr.Images: error while iterating")
 	}
+	return images
 }
 
 // FileFinderFunc is the type of the function called for each file or directory
@@ -289,7 +326,12 @@ func (d *exifDecoder) Decode(path string) (ImageMeta, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() {
+		closeErr := f.Close()
+		if closeErr != nil {
+			panic("runtime error: findhdr.exifDecoder.Decode: error while decoding")
+		}
+	}()
 
 	w := new(exifMeta)
 	w.exif, err = exif.Decode(f)
@@ -306,8 +348,8 @@ type HdrFunc func(hdr *Hdr)
 // uses the decoder to extract their metadata, and adds them to a candidate Hdr.
 // Every valid Hdr found this way is delivered to HdrFunc (see IsHdr() for
 // details on what constitutes a valid hdr).
-func Find(finder FileFinder, decoder Decoder, hdrFn HdrFunc) error {
-	hdr := Hdr{}
+func Find(finder FileFinder, decoder Decoder, min int, max int, hdrFn HdrFunc) error {
+	hdr := NewHdr(min, max)
 
 	// See https://golang.org/pkg/path/filepath/#WalkFunc
 	return finder.Find(func(path string, info os.FileInfo, err error) error {
@@ -319,13 +361,14 @@ func Find(finder FileFinder, decoder Decoder, hdrFn HdrFunc) error {
 			return nil
 		}
 
-		if isimage := hasImageMimeType(path); !isimage {
+		if isimage := isImageFile(path); !isimage {
 			return nil
 		}
 
 		x, err := decoder.Decode(path)
 		if err != nil {
-			fmt.Println(err)
+			// TODO: in verbose mode, warn about files we tried to parse but couldn't?
+			// fmt.Println(err)
 			return nil
 		}
 
@@ -333,26 +376,25 @@ func Find(finder FileFinder, decoder Decoder, hdrFn HdrFunc) error {
 
 		isHdr, err := hdr.IsHdr()
 		if err != nil {
-			fmt.Println(err)
-			return nil
+			return err
 		}
 
 		if isHdr {
 			if hdrFn != nil {
-				hdrFn(&hdr)
+				hdrFn(hdr)
 			}
-			hdr = Hdr{}
+			hdr = NewHdr(hdr.min, hdr.max)
 		}
 
 		return nil // or SkipDir to skip processng this dir
 	})
 }
 
-// hasImageMimeType returns true if the image at the given path has a mime-type of
+// isImageFile returns true if the image at the given path has a mime-type of
 // "image/*". Mime types are calculated using mime.TypeByExtension, which
 // understands mime types built in to the system, as well as custom mime types
 // mappings which we have added for all known RAW image extensions.
-func hasImageMimeType(path string) bool {
+func isImageFile(path string) bool {
 	ext := filepath.Ext(path)
 	mimetype := mime.TypeByExtension(ext)
 	return strings.HasPrefix(mimetype, "image/")
@@ -368,6 +410,9 @@ func addMimeTypes() {
 	}
 
 	for _, mimetype := range mimeTypes {
-		mime.AddExtensionType(mimetype.ext, mimetype.mimetype)
+		err := mime.AddExtensionType(mimetype.ext, mimetype.mimetype)
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 }

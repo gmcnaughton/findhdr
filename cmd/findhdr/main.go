@@ -13,11 +13,15 @@ import (
 //     go build ...findhdr
 //     go install ...findhdr
 //     findhdr ./test
+//     findhdr -min 3 -max 5 ./test
 //     findhdr -link ./out ~/Pictures/Photos\ Library.photoslibrary/Masters/2017/03
 func main() {
 	var inpath, outpath string
+	var min, max int
 
 	flag.StringVar(&outpath, "link", "", "(optional) path where images should be linked")
+	flag.IntVar(&min, "min", 3, "(optional) min number of images to consider")
+	flag.IntVar(&max, "max", 3, "(optional) max number of images to consider")
 	flag.Usage = func() {
 		_, err := fmt.Fprintf(os.Stderr, "Usage: %s [options] <path to images>\n", os.Args[0])
 		if err != nil {
@@ -29,7 +33,7 @@ func main() {
 
 	// Input path can be passed in using the `-in` flag or as the first argument
 	inpath = flag.Arg(0)
-	if inpath == "" {
+	if inpath == "" || min < 1 || max < 1 || min > max {
 		flag.Usage()
 		os.Exit(2)
 	}
@@ -47,7 +51,7 @@ func main() {
 
 	finder := findhdr.NewFileFinder(inpath)
 	decoder := findhdr.NewDecoder()
-	err := findhdr.Find(finder, decoder, func(hdr *findhdr.Hdr) {
+	err := findhdr.Find(finder, decoder, min, max, func(hdr *findhdr.Hdr) {
 		count++
 
 		if outpath != "" {

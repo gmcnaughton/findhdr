@@ -16,6 +16,10 @@ Print a list of HDR sources in a directory:
 
     findhdr /path/to/photos
 
+Print a list of HDR sources in a directory, considering between 2 and 5 photos to constitute an HDR:
+
+    findhdr /path/to/photos
+
 Link HDR sources found into the `-link` directory, creating it if necessary:
 
     findhdr -link ./out /path/to/photos

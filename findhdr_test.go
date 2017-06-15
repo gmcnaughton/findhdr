@@ -10,7 +10,7 @@ import (
 //     go test -v ./...
 
 func TestHdrIsHdrWhenEmpty(t *testing.T) {
-	hdr := Hdr{}
+	hdr := NewHdr(3, 3)
 	isHdr, err := hdr.IsHdr()
 	if err != nil {
 		t.Error("Unexpected error", err)
@@ -48,7 +48,7 @@ func (f testFileFinder) Find(fileFinderFn FileFinderFunc) error {
 }
 
 func TestFindNonExistantDirectory(t *testing.T) {
-	err := Find(testFileFinder{err: os.ErrNotExist}, NewDecoder(), func(hdr *Hdr) {
+	err := Find(testFileFinder{err: os.ErrNotExist}, NewDecoder(), 3, 3, func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
 	if err != os.ErrNotExist {
@@ -57,7 +57,7 @@ func TestFindNonExistantDirectory(t *testing.T) {
 }
 
 func TestFindEmptyDirectory(t *testing.T) {
-	err := Find(testFileFinder{}, NewDecoder(), func(hdr *Hdr) {
+	err := Find(testFileFinder{}, NewDecoder(), 3, 3, func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
 	if err != nil {
@@ -72,7 +72,7 @@ func TestFindNonImageFiles(t *testing.T) {
 		testFile{path: "foo3.txt"},
 	}
 
-	err := Find(testFileFinder{files: files}, NewDecoder(), func(hdr *Hdr) {
+	err := Find(testFileFinder{files: files}, NewDecoder(), 3, 3, func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
 	if err != nil {
@@ -87,7 +87,7 @@ func TestFindNonExistantImageFiles(t *testing.T) {
 		testFile{path: "foo3.JPG"},
 	}
 
-	err := Find(testFileFinder{files: files}, NewDecoder(), func(hdr *Hdr) {
+	err := Find(testFileFinder{files: files}, NewDecoder(), 3, 3, func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
 	if err != nil {
@@ -182,7 +182,7 @@ func TestFind(t *testing.T) {
 		}
 
 		found := false
-		err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, func(hdr *Hdr) {
+		err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, 3, 3, func(hdr *Hdr) {
 			found = true
 		})
 		if err != tt.err {
@@ -213,7 +213,7 @@ func TestYDimensionMismatch(t *testing.T) {
 		nil,
 	}
 
-	err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, func(hdr *Hdr) {
+	err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, 3, 3, func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
 	if err != nil {
@@ -241,7 +241,7 @@ func TestDuplicateBiasValue(t *testing.T) {
 		nil,
 	}
 
-	err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, func(hdr *Hdr) {
+	err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, 3, 3, func(hdr *Hdr) {
 		t.Error("Expected no HDRs to be found")
 	})
 	if err != nil {
@@ -270,7 +270,7 @@ func TestFindSuccess(t *testing.T) {
 	}
 
 	called := 0
-	err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, func(hdr *Hdr) {
+	err := Find(testFileFinder{files: files}, &testDecoder{metas: metas, errs: errs}, 3, 3, func(hdr *Hdr) {
 		called++
 	})
 	if err != nil {
